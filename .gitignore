@@ -1,0 +1,14 @@
+# Ingore all
+*
+# Unignore files with extensions
+!*.*
+# Unignore directories
+!*/
+# Unignore Makefile
+!Makefile
+
+iv.c
+*.so
+*.o
+*.a
+.*.swp
