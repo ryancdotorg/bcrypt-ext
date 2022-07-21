@@ -22,6 +22,10 @@
 #include "blake2b.h"
 #include "chachapoly.h"
 
+#define LIMB_T unsigned long
+#define LIMB_SIZE (sizeof(LIMB_T))
+#define LIMB_BITS (LIMB_SIZE*8)
+
 extern BF_ctx BF_init_state;
 extern BF_word BF_magic_w[6];
 extern unsigned char BF_itoa64[];
@@ -191,29 +195,50 @@ static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
   }
 }
 
-static inline int uint128_dec(unsigned long n[16/sizeof(unsigned long)]) {
-  for (unsigned i = 0; i < (16/sizeof(unsigned long)); ++i) {
-    if (n[i] > 1) {
+static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
+  if (n[0] == 1) {
+    fprintf(stderr, "Last iteration? ");
+    for (unsigned i = 1;; ++i) {
+      if (i == ((16/LIMB_SIZE)-1)) {
+        if (n[i] == 0) {
+          n[0] = 0;
+          fprintf(stderr, "Yes.\n");
+          return 0;
+        } else {
+          break;
+        }
+      } else if (n[i] != 0) {
+        break;
+      }
+    }
+    fprintf(stderr, "No.\n");
+  }
+
+  for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) {
+    if (n[i] > 0xfffc || n[i] < 0x0004) {
+      fprintf(stderr, "uint128_dec %d %016lx\n", i, n[i]);
+    }
+    if (n[i] > 0) {
       n[i] -= 1;
       return 1;
     } else if (n[i] == 0) {
-      n[i] = ~((unsigned long)0);
-      // next iteration
-    } else if (i == 0 && n[0] == 1) {
-      n[0] = 0;
-      for (unsigned j = 0; j < (16/sizeof(unsigned long)); ++j) {
-        if (n[j] != 0) return 1;
+      fprintf(stderr, "n[%d] == 0\n", i);
+      if (i == ((16/LIMB_SIZE)-1)) {
+        fprintf(stderr, "end\n");
+        return 0;
       }
-      return 0;
+      n[i] = ~((LIMB_T)0);
+      // next iteration
     }
   }
+
   return -1;
 }
 
-static inline int uint128_shl(unsigned long n[16/sizeof(unsigned long)], int x) {
+static inline int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
   if (x < 0 || x > 127) return -1;
-  for (unsigned i = 0; i < (16/sizeof(unsigned long)); ++i) n[i] = 0;
-  int bits = 8 * sizeof(unsigned long);
+  for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) n[i] = 0;
+  int bits = 8 * LIMB_SIZE;
   int word = x / bits;
   n[word] = 1 << (x & (bits - 1));
   return 0;
@@ -282,14 +307,25 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < 0) work = data->workfactor;
 
-  if (work <= (int)(sizeof(unsigned long)*8-1)) {
-    unsigned long n = 1 << work;
+  if (work <= (int)(LIMB_BITS-1)) {
+    LIMB_T n = 1 << work;
+    fprintf(stderr, "doing work using  (%lu bits) %016lx\n", LIMB_BITS, n);
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
     } while (--n);
   } else {
-    unsigned long n[16/sizeof(unsigned long)];
+    LIMB_T n[16/LIMB_SIZE];
     if (uint128_shl(n, work) != 0) return -1;
+    fprintf(stderr, "doing work using uint128 emulation ");
+    if (16/LIMB_SIZE == 2) {
+      fprintf(stderr, "%016lx %016lx\n", n[0], n[1]);
+    } else if (16/LIMB_SIZE == 4) {
+      fprintf(stderr, "%08lx %08lx %08lx %08lx\n", n[0], n[1], n[2], n[3]);
+    } else if (16/LIMB_SIZE == 8) {
+      fprintf(stderr, "%04lx %04lx %04lx %04lx %04lx %04lx %04lx %04lx\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7]);
+    } else if (16/LIMB_SIZE == 16) {
+      fprintf(stderr, "%02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8], n[9], n[10], n[11], n[12], n[13], n[14], n[15]);
+    }
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
     } while (uint128_dec(n));
@@ -356,99 +392,6 @@ static char *BF_crypt(struct BF_data *data, const uint8_t *key, const char *sett
 
   return BF_crypt_output(data, output, size);
 }
-
-/*
-static char *BF_crypt2(struct BF_data *data, const uint8_t *key, const char *setting, char *output, int size, BF_word min) {
-  BF_word L, R;
-  BF_word tmp1, tmp2, tmp3, tmp4;
-  BF_word *ptr;
-
-  if (size < BF_HASH_LEN + 1) {
-    errno = ERANGE;
-    return NULL;
-  }
-
-  if (setting[0] != '$' ||
-      setting[1] != '2' ||
-      (setting[2] != 'b' && setting[2] != 'y') ||
-      setting[3] != '$' ||
-      setting[4] < '0' || setting[4] > '9' ||
-      setting[5] < '0' || setting[5] > '9' ||
-      setting[6] != '$') {
-    errno = EINVAL;
-    return NULL;
-  }
-
-  data->workfactor = (setting[4] - '0') * 10 + (setting[5] - '0');
-  if (data->workfactor < min || BF_decode(data->binary.salt, &setting[7], 16)) {
-    errno = EINVAL;
-    return NULL;
-  }
-
-  BF_htobe(data->binary.salt, 4);
-  BF_set_key(key, data->expanded_key, data->ctx.P);
-  memcpy(data->ctx.S, BF_init_state.S, sizeof(data->ctx.S));
-
-  L = R = 0;
-  for (int i = 0; i < BF_N + 2; i += 2) {
-    L ^= data->binary.salt[i & 2];
-    R ^= data->binary.salt[(i & 2) + 1];
-    BF_ENCRYPT(data->ctx.P, data->ctx.S, L, R, tmp1, tmp2, tmp3, tmp4);
-    data->ctx.P[i] = L;
-    data->ctx.P[i + 1] = R;
-  }
-
-  ptr = data->ctx.S[0];
-  do {
-    ptr += 4;
-
-    L ^= data->binary.salt[(BF_N + 2) & 3];
-    R ^= data->binary.salt[(BF_N + 3) & 3];
-    BF_ENCRYPT(data->ctx.P, data->ctx.S, L, R, tmp1, tmp2, tmp3, tmp4);
-    *(ptr - 4) = L;
-    *(ptr - 3) = R;
-
-    L ^= data->binary.salt[(BF_N + 4) & 3];
-    R ^= data->binary.salt[(BF_N + 5) & 3];
-    BF_ENCRYPT(data->ctx.P, data->ctx.S, L, R, tmp1, tmp2, tmp3, tmp4);
-    *(ptr - 2) = L;
-    *(ptr - 1) = R;
-  } while (ptr < &data->ctx.S[3][0xFF]);
-
-  if (data->workfactor <= (sizeof(unsigned long)*8-1)) {
-    unsigned long n = 1 << data->workfactor;
-    do {
-      BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
-    } while (--n);
-  } else {
-    unsigned long n[16/sizeof(unsigned long)];
-    uint128_shl(n, data->workfactor);
-    do {
-      BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
-    } while (uint128_dec(n));
-  }
-
-  for (int i = 0; i < 6; i += 2) {
-    L = BF_magic_w[i];
-    R = BF_magic_w[i + 1];
-
-    for (int j = 0; j < 64; ++j) {
-      BF_ENCRYPT(data->ctx.P, data->ctx.S, L, R, tmp1, tmp2, tmp3, tmp4);
-    }
-
-    data->binary.output[i] = L;
-    data->binary.output[i + 1] = R;
-  }
-
-  memcpy(output, setting, 7 + 22 - 1);
-  output[7 + 22 - 1] = BF_itoa64[(int)BF_atoi64[(int)setting[7 + 22 - 1]] & 0x30];
-  BF_htobe(data->binary.output, 6);
-  BF_encode(&output[7 + 22], data->binary.output, 23);
-  output[7 + 22 + 31] = '\0';
-
-  return output;
-}
-*/
 
 static inline void magic(const char *setting, char *output, int size) {
   if (size >= 3) {
@@ -602,6 +545,7 @@ int bcrypt_test() {
   struct BF_data data, clone;
   char output[80];
 
+  /*
   for (int i = 0; i < 12; i += 1) {
     saved_errno = errno;
     if (BF_test(&data, i) == 0) {
@@ -613,6 +557,7 @@ int bcrypt_test() {
   }
 
   if (ret) return ret;
+  */
 
   struct chachapoly_ctx ccp;
 
@@ -625,13 +570,31 @@ int bcrypt_test() {
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
   ret = BF_crypt_init(&data, test_key, test_setting, 0);
-  for (int i = -1; i < 10;) {
+  for (int i = -1; i < 50;) {
     ret = BF_crypt_work(&data, i++);
+    if (ret != 0) {
+      fprintf(stderr, "BF_crypt_work(%d) failed: %d\n", i-1, ret);
+    }
+
+    char filename[256];
+    sprintf(filename, "bcrypt_midstate_%02d.dat", i);
+    FILE *f = fopen(filename, "w");
+    fwrite(&data, sizeof(data), 1, f);
+    fclose(f);
+
     BF_crypt_clone(&clone, &data);
     BF_crypt_output(&clone, output, sizeof(output));
     BF_crypt_extkey(&data, kwk);
     output[4] = '0' + i / 10;
     output[5] = '0' + i % 10;
+
+    sprintf(filename, "bcrypt_test_vector_%02d.txt", i);
+    f = fopen(filename, "w");
+    fprintf(f, "%s\n", output);
+    fprintf(stderr, "%s\n", output);
+    fclose(f);
+
+    /*
     chachapoly_init(&ccp, kwk);
     chachapoly_wrap(&ccp, (uint8_t *)output, BF_HASH_LEN, key, (uint8_t *)wrapped);
 
@@ -656,6 +619,7 @@ int bcrypt_test() {
     }
 
     fprintf(stderr, "%s%s %d\n", output, wrapped_b64, ret);
+    */
   }
 
   return ret;
