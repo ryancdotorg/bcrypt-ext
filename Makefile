@@ -1,7 +1,8 @@
 export LANG=C LC_ALL=C
 
 CODEGEN = iv.c
-HEADERS = bcrypt-ext.h
+HEADERS = config.h bcrypt-ext.h
+OBJ_BCRYPT = blowfish.o iv.o codec.o chacha.o poly1305-donna/poly1305-donna.o chachapoly.o blake2b-ref.o
 
 override CFLAGS += -O3 -fPIC \
 	-Wall -Wextra -pedantic \
@@ -12,10 +13,19 @@ COMPILE = $(CC) $(CFLAGS)
 .PHONY: all clean _clean _nop
 .PRECIOUS: %.o
 
-all: iv.so
+all: bcrypt_test
+
+bcrypt_test: bcrypt_test.o $(OBJ_BCRYPT)
+	$(COMPILE) $^ -o $@
+
+config.h: config.py
+	python3 -B $< > $@
 
 iv.c: codegen.py constants.py
 	python3 -B constants.py > $@
+
+libbcrypt-ext.so: $(OBJ_BCRYPT)
+	$(COMPILE) -shared $^ -o $@
 
 # fallback build rules
 %.o: %.c %.h $(HEADERS)
@@ -31,6 +41,6 @@ iv.c: codegen.py constants.py
 # note that $(info ...) prints everything on one line
 clean: _nop $(foreach _,$(filter clean,$(MAKECMDGOALS)),$(info $(shell $(MAKE) _clean)))
 _clean:
-	rm -rf $(wildcard *.o) $(wildcard *.so) || /bin/true
+	rm -rf config.h $(wildcard *.o) $(wildcard *.so) || /bin/true
 _nop:
 	@true

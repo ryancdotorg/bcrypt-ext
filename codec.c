@@ -3,8 +3,8 @@
 #include "codec.h"
 #include "bcrypt-ext.h"
 
-static unsigned char BF_itoa64[] = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-static uint8_t BF_atoi64[] = {
+unsigned char BF_itoa64[] = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+uint8_t BF_atoi64[] = {
   99, 99, 99, 99, 99, 99, 99, 99,   99, 99, 99, 99, 99, 99, 99, 99,
   99, 99, 99, 99, 99, 99, 99, 99,   99, 99, 99, 99, 99, 99, 99, 99,
   99, 99, 99, 99, 99, 99, 99, 99,   99, 99, 99, 99, 99, 99,  0,  1,
