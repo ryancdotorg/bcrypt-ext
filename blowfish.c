@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #ifdef HAS_GETRANDOM
 #include <sys/random.h>
@@ -197,45 +198,29 @@ static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
 
 static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   if (n[0] == 1) {
-    fprintf(stderr, "Last iteration? ");
-    for (unsigned i = 1;; ++i) {
+    for (unsigned i = 1;;) {
       if (i == ((16/LIMB_SIZE)-1)) {
-        if (n[i] == 0) {
-          n[0] = 0;
-          fprintf(stderr, "Yes.\n");
-          return 0;
-        } else {
-          break;
-        }
-      } else if (n[i] != 0) {
+        if (n[i] == 0) return n[0] = 0;
+        break;
+      } else if (n[i++] != 0) {
         break;
       }
     }
-    fprintf(stderr, "No.\n");
   }
 
   for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) {
-    if (n[i] > 0xfffc || n[i] < 0x0004) {
-      fprintf(stderr, "uint128_dec %d %016lx\n", i, n[i]);
-    }
     if (n[i] > 0) {
       n[i] -= 1;
       return 1;
     } else if (n[i] == 0) {
-      fprintf(stderr, "n[%d] == 0\n", i);
-      if (i == ((16/LIMB_SIZE)-1)) {
-        fprintf(stderr, "end\n");
-        return 0;
-      }
       n[i] = ~((LIMB_T)0);
-      // next iteration
     }
   }
 
   return -1;
 }
 
-static inline int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
+static int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
   if (x < 0 || x > 127) return -1;
   for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) n[i] = 0;
   int bits = 8 * LIMB_SIZE;
@@ -307,25 +292,34 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < 0) work = data->workfactor;
 
-  if (work <= (int)(LIMB_BITS-1)) {
-    LIMB_T n = 1 << work;
-    fprintf(stderr, "doing work using  (%lu bits) %016lx\n", LIMB_BITS, n);
+  if (work < (int)(LIMB_BITS)) {
+    LIMB_T n = ((LIMB_T)1) << work;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat"
+    fprintf(stderr, "doing work using (%lu bits) %lx\n", LIMB_BITS, n);
+#pragma GCC diagnostic pop
+
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
     } while (--n);
   } else {
     LIMB_T n[16/LIMB_SIZE];
     if (uint128_shl(n, work) != 0) return -1;
+
     fprintf(stderr, "doing work using uint128 emulation ");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat"
     if (16/LIMB_SIZE == 2) {
       fprintf(stderr, "%016lx %016lx\n", n[0], n[1]);
     } else if (16/LIMB_SIZE == 4) {
       fprintf(stderr, "%08lx %08lx %08lx %08lx\n", n[0], n[1], n[2], n[3]);
     } else if (16/LIMB_SIZE == 8) {
-      fprintf(stderr, "%04lx %04lx %04lx %04lx %04lx %04lx %04lx %04lx\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7]);
+      fprintf(stderr, "%04x %04x %04x %04x %04x %04x %04x %04x\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7]);
     } else if (16/LIMB_SIZE == 16) {
-      fprintf(stderr, "%02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx %02lx\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8], n[9], n[10], n[11], n[12], n[13], n[14], n[15]);
+      fprintf(stderr, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8], n[9], n[10], n[11], n[12], n[13], n[14], n[15]);
     }
+#pragma GCC diagnostic pop
+
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
     } while (uint128_dec(n));
@@ -393,7 +387,7 @@ static char *BF_crypt(struct BF_data *data, const uint8_t *key, const char *sett
   return BF_crypt_output(data, output, size);
 }
 
-static inline void magic(const char *setting, char *output, int size) {
+static void magic(const char *setting, char *output, int size) {
   if (size >= 3) {
     output[0] = '*';
     output[1] = setting[0] == '*' && setting[1] == '0' ? '1' : '0';
@@ -571,28 +565,44 @@ int bcrypt_test() {
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
   ret = BF_crypt_init(&data, test_key, test_setting, 0);
   for (int i = -1; i < 50;) {
-    ret = BF_crypt_work(&data, i++);
-    if (ret != 0) {
-      fprintf(stderr, "BF_crypt_work(%d) failed: %d\n", i-1, ret);
-    }
-
     char filename[256];
-    sprintf(filename, "bcrypt_midstate_%02d.dat", i);
-    FILE *f = fopen(filename, "w");
-    fwrite(&data, sizeof(data), 1, f);
-    fclose(f);
+    sprintf(filename, "bcrypt_midstate_%02d.dat", i+1);
+
+    FILE *f;
+    struct stat s;
+    ret = stat(filename, &s);
+    if (ret == 0) {
+      fprintf(stderr, "loading %s\n", filename);
+      f = fopen(filename, "r");
+      const char *setting = data.setting;
+      fread(&data, sizeof(data), 1, f);
+      data.setting = setting;
+      fclose(f);
+      ++i;
+    } else {
+      ret = BF_crypt_work(&data, i++);
+      if (ret != 0) {
+        fprintf(stderr, "BF_crypt_work(%d) failed: %d\n", i-1, ret);
+      }
+
+      //f = fopen(filename, "w");
+      //fwrite(&data, sizeof(data), 1, f);
+      //fclose(f);
+    }
 
     BF_crypt_clone(&clone, &data);
     BF_crypt_output(&clone, output, sizeof(output));
-    BF_crypt_extkey(&data, kwk);
+    //BF_crypt_extkey(&data, kwk);
     output[4] = '0' + i / 10;
     output[5] = '0' + i % 10;
 
+    /*
     sprintf(filename, "bcrypt_test_vector_%02d.txt", i);
     f = fopen(filename, "w");
     fprintf(f, "%s\n", output);
-    fprintf(stderr, "%s\n", output);
     fclose(f);
+    */
+    fprintf(stderr, "%s\n", output);
 
     /*
     chachapoly_init(&ccp, kwk);
