@@ -434,38 +434,39 @@ static int BF_test(struct BF_data *data, int workfactor) {
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
   static const char * const test_hashes[] = {
-    "i1D709vfamulimlGcq0qq3UvuUasvEa\0\x55", // 00
+    "i1D709vfamulimlGcq0qq3UvuUasvEa\0\x55", //_00
     "ea2P/XC0wqaYu8MS2U9Vei2nIfTJUHG\0\x55",
     "7df0f2n8vxhMUG.6KJna0H2yfJBqasm\0\x55",
     "Sg4bRvbyRqNr5QhS3wkDFU8qFWrWI32\0\x55",
     "CuG1542.TQQ5sV5blteEjyJX7.JFjVK\0\x55",
-    "GfHEoDURu7Q6ifmsuE4jQVVoUgpARMa\0\x55", // 05
+    "GfHEoDURu7Q6ifmsuE4jQVVoUgpARMa\0\x55", //_05
     "84jSgqqXY7rYooZCdSiV9EnuhEeXxfO\0\x55",
     "JtxJnHAGvqlOrCsRPO2UQiQp8zQzT0S\0\x55",
     "6MzYW9xr9OyWo4COY5UpcGM0a.hpPyW\0\x55",
     "zj7bMp.dwqQmiO7zj702f5m8Hbs3vZm\0\x55",
-    "9DtqmZTtJIox/S2bpDWGgwgTHcKfifm\0\x55", // 10
+    "9DtqmZTtJIox/S2bpDWGgwgTHcKfifm\0\x55", //_10
     "XI1SmkIATHacbnoNQ7GO9k.YyPw.pBC\0\x55",
     "SWcBA2KWBjyvNwm2by31uzXFXdoMgPO\0\x55",
     "PEaJvk2yRxFWH5t4qfmN0chMvkX1Zhm\0\x55",
     "QelOzq9.YbfekxLQmOKuNhTTbKk3JWC\0\x55",
-    "kMoCn3dYknJ3VE.Ueg2T5vewx8kQhsW\0\x55", // 15
+    "kMoCn3dYknJ3VE.Ueg2T5vewx8kQhsW\0\x55", //_15
     ".WKej21IvE2XA/19t2YaHSokxx34R82\0\x55",
     "fZSVVM72Cq6CQiSULKbjt1uXcNGX6cC\0\x55",
     "P/o66a8GOxiv3qJrPKhD.AiquuCzM1q\0\x55",
     "j2aXkPDDwRen9C42X4Tp36Ep.a7ba0q\0\x55",
-    "fVMCs9o6Swdy3/lqgL.OYN5tCix20oC\0\x55", // 20
+    "fVMCs9o6Swdy3/lqgL.OYN5tCix20oC\0\x55", //_20
     "0Ur.qso.4D3aLpDrcZso61vO5uVC7v.\0\x55",
     "Twx/pVi.p8LJE/JnvIFI4sT7wNXNExW\0\x55",
     "IDdbhP2fL2aDzYxKOGbFT.Sdh9BI02i\0\x55",
     "/2x9atT8gIKUN43bB2yvsxgSpfR9jc6\0\x55",
-    "nXpOZyQ1Si8bEQR2DDlI2QkPVaIIptq\0\x55", // 25
+    "nXpOZyQ1Si8bEQR2DDlI2QkPVaIIptq\0\x55", //_25
     "uugiiBtqNmUot/Tz8M1M56M9rBUgzTq\0\x55",
     "EhswxO8WJOKnpNMjatewDLR6KcQQ1jK\0\x55",
     "uuQIEdwdBEumQ3e1EZt7mk4r2aAdSkS\0\x55",
     "8nC9I3qqNkMuU4tjlhxxbaf6ea00qWe\0\x55",
-    "FCKuTBCsuJCxOacfmhEUZeJxOjecmAm\0\x55", // 30
+    "FCKuTBCsuJCxOacfmhEUZeJxOjecmAm\0\x55", //_30
     "yt2VTnqPB6XjaqNkHFQoTECutHBUEji\0\x55",
+    "hUkRUE01JLuxg7/PBEeH4GVNmz48T2O\0\x55",
   };
   const char *p;
   int ok;
