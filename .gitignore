@@ -1,9 +1,9 @@
 # Ingore all
-*
+**/*
 # Unignore files with extensions
-!*.*
+!**/*.*
 # Unignore directories
-!*/
+!**/*/
 # Unignore Makefile
 !Makefile
 
@@ -11,7 +11,7 @@ bcrypt_midstate_*.dat
 bcrypt_test_vector_*.txt
 iv.c
 config.h
-*.so
-*.o
-*.a
-.*.swp
+**/*.so
+**/*.o
+**/*.a
+**/.*.swp
