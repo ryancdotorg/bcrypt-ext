@@ -12,11 +12,11 @@ void chachapoly_init(struct chachapoly_ctx *ctx, const uint8_t key[32]);
 void chachapoly_wrap(
   struct chachapoly_ctx *ctx,
   const uint8_t *ad, size_t ad_sz,
-  uint8_t *input, uint8_t *output
+  const uint8_t *input, uint8_t *output
 );
 
 int chachapoly_unwrap(
   struct chachapoly_ctx *ctx,
   const uint8_t *ad, size_t ad_sz,
-  uint8_t *input, uint8_t *output
+  const uint8_t *input, uint8_t *output
 );
