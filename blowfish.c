@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <dlfcn.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <time.h>
 #include <unistd.h>
@@ -294,10 +295,12 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < (int)(LIMB_BITS)) {
     LIMB_T n = ((LIMB_T)1) << work;
+    /*
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
     fprintf(stderr, "doing work using (%lu bits) %lx\n", LIMB_BITS, n);
 #pragma GCC diagnostic pop
+    //*/
 
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
@@ -306,6 +309,7 @@ static int BF_crypt_work(struct BF_data *data, int work) {
     LIMB_T n[16/LIMB_SIZE];
     if (uint128_shl(n, work) != 0) return -1;
 
+    /*
     fprintf(stderr, "doing work using uint128 emulation ");
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
@@ -319,6 +323,7 @@ static int BF_crypt_work(struct BF_data *data, int work) {
       fprintf(stderr, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8], n[9], n[10], n[11], n[12], n[13], n[14], n[15]);
     }
 #pragma GCC diagnostic pop
+    //*/
 
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
@@ -358,14 +363,42 @@ static char *BF_crypt_output(struct BF_data *data, char *output, int size) {
   return output;
 }
 
-static int BF_crypt_extkey(struct BF_data *data, uint8_t *output) {
+static void BF_crypt_ext_kwk(struct BF_data *data, uint8_t kwk[32]) {
   BF_word *S = (BF_word *)data->ctx.S;
 
   BF_htobe(S, 4*256);
-  int ret = blake2b(output, 32, S, sizeof(BF_word)*4*256, NULL, NULL, 0);
+  // it should not be possible for this to fail...
+  int ret = blake2b(kwk, 32, S, sizeof(BF_word)*4*256, NULL, NULL, 0);
+  assert(ret == 0);
   BF_betoh(S, 4*256);
+}
 
-  return ret;
+static int BF_crypt_ext_wrap(const uint8_t kwk[32], char *output, int size, const uint8_t ext[32]) {
+  if (size < BF_EXT_LEN + 1) {
+    errno = ERANGE;
+    return -1;
+  }
+
+  BF_word wrapped[12];
+  struct chachapoly_ctx ccp;
+
+  chachapoly_init(&ccp, kwk);
+  chachapoly_wrap(&ccp, (uint8_t *)output, BF_HASH_LEN, ext, (uint8_t *)wrapped);
+  BF_betoh(wrapped, 12);
+  output[BF_HASH_LEN] = '$';
+  BF_encode(output+BF_HASH_LEN+1, (BF_word *)wrapped, 48);
+  output[BF_EXT_LEN] = '\0';
+  return 0;
+}
+
+static int BF_crypt_ext_unwrap(const uint8_t kwk[32], const char *input, uint8_t ext[32]) {
+  BF_word wrapped[12];
+  struct chachapoly_ctx ccp;
+
+  chachapoly_init(&ccp, kwk);
+  BF_decode((BF_word *)wrapped, input+BF_HASH_LEN+1, 48);
+  BF_htobe(wrapped, 12);
+  return chachapoly_unwrap(&ccp, (uint8_t *)input, BF_HASH_LEN, (uint8_t *)wrapped, ext);
 }
 
 static void *BF_crypt_clone(struct BF_data *dst, struct BF_data *src) {
@@ -378,7 +411,7 @@ static char *BF_crypt(struct BF_data *data, const uint8_t *key, const char *sett
 
   /*
   uint8_t extkey[32];
-  BF_crypt_extkey(data, extkey);
+  BF_crypt_ext_kwk(data, extkey);
   printf("extkey: ");
   for (int i = 0; i < 32; ++i) printf("%02x", extkey[i]);
   printf("\n");
@@ -430,7 +463,8 @@ static int csprng(void *out, int len) {
   return ret;
 }
 
-static int BF_test(struct BF_data *data, int workfactor) {
+// effectively wipes data structures as a side effect
+static int BF_test(struct BF_data *data, uint8_t kwk[32], int workfactor) {
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
   static const char * const test_hashes[] = {
@@ -501,7 +535,15 @@ static int BF_test(struct BF_data *data, int workfactor) {
     ok = ok && ye[17] == 0x33343500;
   }
 
-  return ok ? 0 : -1;
+  char v = 0;
+  if (kwk != NULL) {
+    // wipe the key wrapping key
+    BF_crypt_ext_kwk(data, kwk);
+    // make sure the compiler doesn't optimize the wipe out. probably.
+    for (int i = 0; i < 32; ++i)  v |= kwk[i];
+  }
+
+  return v != 0 && ok ? 0 : -1;
 }
 
 static char *BF_salt(char *output, int size, int workfactor) {
@@ -535,15 +577,64 @@ static char *BF_salt(char *output, int size, int workfactor) {
   return output;
 }
 
+int64_t bcrypt_bench(int workfactor) {
+  int64_t d, best_d = INT64_MAX;
+  uint64_t t, i = 0, start = getns();
+  struct BF_data data;
+
+  do {
+    ++i;
+    t = getns();
+    int saved_errno = errno;
+    if (BF_test(&data, NULL, workfactor) == 0) return -1;
+    errno = saved_errno;
+    d = getns() - t;
+    if (d > 0 && d < best_d) best_d = d;
+  } while (t - start < 1000000LL || i < 1);
+
+  return best_d;
+}
+
+int bcrypt_target(uint32_t msec) {
+  int ratio_okay = 0;
+  double ratio;
+  int64_t nsec = (int64_t)msec * 1000000LL, curr, last;
+  for (int repeat = 0; repeat < 10; ++repeat) {
+    last = -1;
+    for (int i = 1; i <= 8; ++i) {
+      curr = bcrypt_bench(i);
+      if (i > 3) {
+        ratio = (double)curr / (double)last;
+        if (ratio >= 1.9 && ratio <= 2.1) {
+          ratio_okay += 1;
+        } else {
+          ratio_okay = 0;
+        }
+
+        if (ratio_okay >= 4) {
+          while (curr > nsec * 3) { curr /= 2; --i; }
+          while (curr < (nsec * 3) / 4) { curr *= 2; ++i; }
+          return i;
+        }
+      }
+
+      last = curr;
+    }
+  }
+
+  return -1;
+}
+
 int bcrypt_test() {
-  int saved_errno, ret = 0;
+  int ret = 0;
   struct BF_data data, clone;
   char output[80];
 
-  /*
-  for (int i = 0; i < 12; i += 1) {
+  //*
+  int saved_errno;
+  for (int i = 0; i < 4; i += 1) {
     saved_errno = errno;
-    if (BF_test(&data, i) == 0) {
+    if (BF_test(&data, NULL, i) == 0) {
       errno = saved_errno;
     } else {
       ret += 1;
@@ -551,16 +642,8 @@ int bcrypt_test() {
     }
   }
 
-  if (ret) return ret;
-  */
-
-  struct chachapoly_ctx ccp;
-
-  char wrapped_b64[66];
-  BF_word wrapped[12];
-  uint8_t kwk[32], key[32], uwk[32];
-  for (int i = 0; i < 32; ++i) key[i] = i + 1;
-  csprng(key, sizeof(key));
+  return ret;
+  //*/
 
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
@@ -586,120 +669,28 @@ int bcrypt_test() {
         fprintf(stderr, "BF_crypt_work(%d) failed: %d\n", i-1, ret);
       }
 
-      //f = fopen(filename, "w");
-      //fwrite(&data, sizeof(data), 1, f);
-      //fclose(f);
+      f = fopen(filename, "w");
+      fwrite(&data, sizeof(data), 1, f);
+      fclose(f);
     }
 
     BF_crypt_clone(&clone, &data);
     BF_crypt_output(&clone, output, sizeof(output));
-    //BF_crypt_extkey(&data, kwk);
     output[4] = '0' + i / 10;
     output[5] = '0' + i % 10;
 
-    /*
     sprintf(filename, "bcrypt_test_vector_%02d.txt", i);
     f = fopen(filename, "w");
     fprintf(f, "%s\n", output);
     fclose(f);
-    */
     fprintf(stderr, "%s\n", output);
-
-    /*
-    chachapoly_init(&ccp, kwk);
-    chachapoly_wrap(&ccp, (uint8_t *)output, BF_HASH_LEN, key, (uint8_t *)wrapped);
-
-    wrapped_b64[0] = '$';
-
-    BF_betoh(wrapped, 12);
-    BF_encode(wrapped_b64+1, (BF_word *)wrapped, 48);
-
-    BF_decode((BF_word *)wrapped, wrapped_b64+1, 48);
-    BF_htobe(wrapped, 12);
-
-    int q = chachapoly_unwrap(&ccp, (uint8_t *)output, BF_HASH_LEN, (uint8_t *)wrapped, uwk);
-
-    fprintf(stderr, "kwk: ");
-    for (int i = 0; i < 32; ++i) fprintf(stderr, "%02x", kwk[i]);
-    fprintf(stderr, "\n");
-
-    if (q == 0) {
-      fprintf(stderr, "key: ");
-      for (int i = 0; i < 32; ++i) fprintf(stderr, "%02x", uwk[i]);
-      fprintf(stderr, "\n");
-    }
-
-    fprintf(stderr, "%s%s %d\n", output, wrapped_b64, ret);
-    */
   }
 
   return ret;
 }
 
 int bcrypt_check(const uint8_t *key, const char *input) {
-  char *retval;
-  int saved_errno;
-  char output[BF_HASH_LEN + 1];
-  struct BF_data data;
-  magic(input, output, sizeof(output));
-  retval = BF_crypt(&data, key, input, output, sizeof(output), 0);
-
-  saved_errno = errno;
-  if (BF_test(&data, 0) == 0) {
-    errno = saved_errno;
-    if (retval != NULL) {
-      char v = 0;
-      for (int i = 0; i < BF_HASH_LEN; ++i) v |= input[i] ^ output[i];
-      if (v == 0) return 1;
-    }
-  }
-
-  return 0;
-}
-
-char *bcrypt_ext_create(const uint8_t *key, uint8_t *ext, char *output, int size, int workfactor) {
-  if (size < BF_EXT_LEN + 1) {
-    errno = ERANGE;
-    return NULL;
-  }
-
-  char *retval;
-  int saved_errno;
-  struct BF_data data;
-  char setting[BF_SETTING_LEN + 1];
-  if (BF_salt(setting, sizeof(setting), workfactor) == NULL) return NULL;
-  magic(setting, output, size);
-
-  retval = BF_crypt(&data, key, setting, output, size, 4);
-
-  saved_errno = errno;
-  if (BF_test(&data, 0) == 0) {
-    errno = saved_errno;
-
-    if (retval != NULL) {
-      if (csprng(ext, 32) < 32) {
-        errno = errno || EIO;
-        return NULL;
-      }
-
-      uint8_t kwk[32];
-      BF_word wrapped[12];
-      struct chachapoly_ctx ccp;
-      BF_crypt_extkey(&data, kwk);
-      chachapoly_init(&ccp, kwk);
-      chachapoly_wrap(&ccp, (uint8_t *)output, BF_HASH_LEN, ext, (uint8_t *)wrapped);
-      BF_betoh(wrapped, 12);
-      output[BF_HASH_LEN] = '$';
-      BF_encode(output+BF_HASH_LEN+1, (BF_word *)wrapped, 48);
-      output[BF_EXT_LEN] = '\0';
-    }
-
-    return retval;
-  }
-
-  magic(setting, output, size);
-  errno = EINVAL;
-  return NULL;
+  return bcrypt_ext_check(key, input, NULL);
 }
 
 char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) {
@@ -713,7 +704,7 @@ char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) 
   retval = BF_crypt(&data, key, setting, output, size, 4);
 
   saved_errno = errno;
-  if (BF_test(&data, 0) == 0) {
+  if (BF_test(&data, NULL, 0) == 0) {
     errno = saved_errno;
     return retval;
   }
@@ -721,4 +712,115 @@ char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) 
   magic(setting, output, size);
   errno = EINVAL;
   return NULL;
+}
+
+int bcrypt_ext_test() {
+  return bcrypt_test();
+}
+
+int bcrypt_ext_check(const uint8_t *key, const char *input, uint8_t ext[32]) {
+  uint8_t kwk[32];
+  int fail, saved_errno;
+  char v = 1, output[BF_HASH_LEN + 1], *retval;
+  struct BF_data data;
+  magic(input, output, sizeof(output));
+
+  if ((fail = BF_crypt_init(&data, key, input, 0)) == 0) {
+    if ((fail = BF_crypt_work(&data, -1)) == 0) {
+      BF_crypt_ext_kwk(&data, kwk);
+    }
+  }
+
+  retval = BF_crypt_output(&data, output, sizeof(output));
+  fail = BF_crypt_ext_unwrap(kwk, input, ext);
+
+  saved_errno = errno;
+  if (BF_test(&data, kwk, 0) == 0) {
+    errno = saved_errno;
+    if (retval != NULL) {
+      v = fail ? 1 : 0;
+      for (int i = 0; i < BF_HASH_LEN; ++i) v |= input[i] ^ output[i];
+
+      if (v == 0) return 1;
+    }
+  }
+
+  return 0;
+}
+
+static char *_bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[32], char rand, int workfactor) {
+  assert(size >= BF_EXT_LEN + 1);
+
+  uint8_t kwk[32];
+  int fail = 0;
+  struct BF_data data;
+  char setting[BF_SETTING_LEN + 1], *retval = NULL;
+  setting[0] = 0;
+
+  if (BF_salt(setting, sizeof(setting), workfactor) == NULL) {
+    errno = errno || EINVAL;
+  } else {
+    magic(setting, output, size);
+
+    if ((fail = BF_crypt_init(&data, key, setting, 0)) == 0) {
+      if ((fail = BF_crypt_work(&data, -1)) == 0) {
+        if (rand && csprng(ext, 32) < 32) {
+          errno = errno || EIO;
+        } else {
+          BF_crypt_ext_kwk(&data, kwk);
+          // output hash
+          retval = BF_crypt_output(&data, output, size);
+          // wrap the ext key
+          if (BF_crypt_ext_wrap(kwk, output, size, ext) != 0) {
+            errno = errno || EINVAL;
+            retval = NULL;
+          }
+        }
+      }
+    }
+  }
+
+  if (BF_test(&data, kwk, 0) != 0 || fail) retval = NULL;
+
+  if (retval == NULL) {
+    magic(setting, output, size);
+    errno = errno || EINVAL;
+  }
+
+  return retval;
+}
+
+char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[32], int workfactor) {
+  if (size < BF_EXT_LEN + 1) {
+    errno = ERANGE;
+    return NULL;
+  }
+
+  char *tmp = _bcrypt_ext_create(key, output, size, ext, 1, workfactor);
+  return tmp;
+}
+
+char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io, int size, int new_workfactor) {
+  if (size < BF_EXT_LEN + 1) {
+    errno = ERANGE;
+    return NULL;
+  }
+
+  int workfactor;
+  uint8_t ext[32];
+
+  if (new_workfactor < 0) {
+    workfactor = (io[4] - '0') * 10 + (io[5] - '0');
+  } else {
+    workfactor = new_workfactor;
+  }
+
+  if (bcrypt_ext_check(old_key, io, ext) != 1) {
+    char setting[2] = { 0, 0 };
+    magic(setting, io, size);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  return _bcrypt_ext_create(new_key, io, size, ext, 0, workfactor);
 }
