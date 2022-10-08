@@ -13,9 +13,9 @@ COMPILE = $(CC) $(CFLAGS)
 .PHONY: all clean _clean _nop
 .PRECIOUS: %.o
 
-all: bcrypt_test
+all: bcrypt_ext_test libbcrypt-ext.so
 
-bcrypt_test: bcrypt_test.o $(OBJ_BCRYPT)
+bcrypt_ext_test: bcrypt_ext_test.o $(OBJ_BCRYPT)
 	$(COMPILE) $^ -o $@
 
 config.h: config.py
@@ -41,6 +41,6 @@ libbcrypt-ext.so: $(OBJ_BCRYPT)
 # note that $(info ...) prints everything on one line
 clean: _nop $(foreach _,$(filter clean,$(MAKECMDGOALS)),$(info $(shell $(MAKE) _clean)))
 _clean:
-	rm -rf config.h $(wildcard *.o) $(wildcard *.so) || /bin/true
+	rm -rf iv.c config.h bcrypt_ext_test $(wildcard *.o) $(wildcard *.so) || /bin/true
 _nop:
 	@true
