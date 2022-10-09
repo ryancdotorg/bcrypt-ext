@@ -1,3 +1,0 @@
-[submodule "poly1305-donna"]
-	path = poly1305-donna
-	url = https://github.com/floodyberry/poly1305-donna.git

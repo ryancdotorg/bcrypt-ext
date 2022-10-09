@@ -32,6 +32,12 @@ enum blake2b_constant
   BLAKE2B_PERSONALBYTES = 16
 };
 
+enum blake2b_setting
+{
+  BLAKE2B_SALT,
+  BLAKE2B_PERSONAL
+};
+
 typedef struct blake2b_state__
 {
   uint64_t h[8];
@@ -67,4 +73,16 @@ enum {
 };
 
 /* Simple API */
-int blake2b( void *out, size_t outlen, const void *in, size_t inlen, const void *salt, const void *key, size_t keylen );
+int blake2b_simple( void *out, size_t outlen, const void *in, size_t inlen );
+
+/* Parameter API */
+void blake2b_param_new( blake2b_param *param );
+int blake2b_param_set( blake2b_param *P, int setting, ...);
+
+/* One-shot API */
+int blake2b_oneshot( const blake2b_param *param, void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
+
+/* Stream API */
+int blake2b_init( blake2b_state *S, const blake2b_param *param, size_t outlen, const void *key, size_t keylen );
+int blake2b_update( blake2b_state *S, const void *in, size_t inlen );
+int blake2b_final( blake2b_state *S, void *out, size_t outlen );

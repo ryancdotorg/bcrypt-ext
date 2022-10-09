@@ -2,7 +2,7 @@ export LANG=C LC_ALL=C
 
 CODEGEN = iv.c
 HEADERS = config.h bcrypt-ext.h
-OBJ_BCRYPT = blowfish.o iv.o codec.o chacha.o poly1305-donna/poly1305-donna.o chachapoly.o blake2b-ref.o
+OBJ_BCRYPT = blowfish.o memzero.o iv.o codec.o blake2b-ref.o
 
 override CFLAGS += -O3 -fPIC \
 	-Wall -Wextra -pedantic \
