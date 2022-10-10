@@ -27,6 +27,9 @@ iv.c: codegen.py constants.py
 libbcrypt-ext.so: $(OBJ_BCRYPT)
 	$(COMPILE) -shared $^ -o $@
 
+mariadb-bcrypt-ext.so: mariadb.o $(OBJ_BCRYPT)
+	$(COMPILE) -shared $^ -o $@
+
 # fallback build rules
 %.o: %.c %.h $(HEADERS)
 	$(COMPILE) -c $< -o $@
