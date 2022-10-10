@@ -23,7 +23,6 @@
 #include "bcrypt-ext.h"
 #include "codec.h"
 #include "blake2b.h"
-//#include "chachapoly.h"
 
 #define LIMB_T unsigned long
 #define LIMB_SIZE (sizeof(LIMB_T))
@@ -412,8 +411,8 @@ static int BF_crypt_ext_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, 
   blake2b_update(S, ct, BX_WKBYTES);
   blake2b_final(S, mac, BX_MACBYTES);
 
-  BF_letoh(wrapped, 12);
   output[BF_HASH_LEN] = '$';
+  BF_letoh(wrapped, 12);
   BF_encode(output+BF_HASH_LEN+1, (BF_word *)wrapped, 48);
   output[BF_EXT_LEN] = '\0';
 
