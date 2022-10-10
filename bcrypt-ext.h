@@ -5,6 +5,8 @@
 #include <endian.h>
 #include <assert.h>
 
+#define TRACE fprintf(stderr, "TRACE:%s:%s@%d %s (%d)\n", __FILE__, __func__, __LINE__, strerror(errno), errno)
+
 #define STATIC_ASSERT(test) static_assert((test), "(" #test ")")
 
 #define _STR(S) #S

@@ -2,10 +2,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #include "bcrypt-ext.h"
+#include "codec.h"
 
-static char *hex(const uint8_t *in, size_t in_sz, char *buf, size_t buf_sz) {
+static char *hex(char *buf, size_t buf_sz, const uint8_t *in, size_t in_sz) {
   char *ret = buf;
   if (buf_sz < in_sz * 2 + 1) {
     return NULL;
@@ -61,7 +63,10 @@ int main(int argc, char *argv[]) {
   } else if (argn >= 2 && argn <= 3 && strcmp(argv[1], "ext_create") == 0) {
     WORKFACTOR(3, 12);
     output = bcrypt_ext_create((uint8_t *)argv[2], hash, sizeof(hash), ext, workfactor);
-    printf("%s\t%s\n", output, hex(ext, sizeof(ext), buf, sizeof(buf)));
+    b64_encode(buf, sizeof(buf), ext, sizeof(ext));
+    printf("%s\n%s\n", output, buf);
+    b85_encode(buf, sizeof(buf), ext, sizeof(ext));
+    printf("%s\n", buf);
 
   } else if (argn == 3 && strcmp(argv[1], "check") == 0) {
     ret = bcrypt_check((uint8_t *)argv[3], argv[2]) == 1 ? 0 : 1;
@@ -69,7 +74,10 @@ int main(int argc, char *argv[]) {
 
   } else if (argn == 3 && strcmp(argv[1], "ext_check") == 0) {
     ret = bcrypt_ext_check((uint8_t *)argv[3], argv[2], ext) == 1 ? 0 : 1;
-    if (ret == 0) printf("%s\n", hex(ext, sizeof(ext), buf, sizeof(buf)));
+    b64_encode(buf, sizeof(buf), ext, sizeof(ext));
+    if (ret == 0) printf("%s\n", buf);
+    b85_encode(buf, sizeof(buf), ext, sizeof(ext));
+    if (ret == 0) printf("%s\n", buf);
 
   } else if (argn >= 4 && argn <= 5 && strcmp(argv[1], "ext_rekey") == 0) {
     WORKFACTOR(5, -1);
