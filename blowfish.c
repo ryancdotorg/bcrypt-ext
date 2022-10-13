@@ -205,6 +205,15 @@ static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   return -1;
 }
 
+// set unsigned 128 bit integer to 2 to the x'th power
+static int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
+  if (x < 0 || x > 127) return -1;
+  for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) n[i] = 0;
+  int bits = 8 * LIMB_SIZE;
+  int word = x / bits;
+  n[word] = 1 << (x & (bits - 1));
+  return 0;
+}
 
 static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
   const uint8_t *ptr = key;
@@ -225,16 +234,6 @@ static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
     expanded[i] = tmp;
     initial[i] = BF_init_state.P[i] ^ tmp;
   }
-}
-
-// set unsigned 128 bit integer to 2 to the x'th power
-static int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
-  if (x < 0 || x > 127) return -1;
-  for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) n[i] = 0;
-  int bits = 8 * LIMB_SIZE;
-  int word = x / bits;
-  n[word] = 1 << (x & (bits - 1));
-  return 0;
 }
 
 static int BF_crypt_init(struct BF_data *data, const uint8_t *key, const char *setting, BF_word min) {
