@@ -52,15 +52,6 @@ struct BF_data {
   } binary;
 };
 
-// Magic IV for 64 Blowfish encryptions that we use to produce the 'ext key'
-// The string is "RecompilingSuperciliousCynosuresQuickest" on big-endian.
-/*
-static BF_word BF_magic_ext_w[10] = {
-  0x5265636F, 0x6D70696C, 0x696E6753, 0x75706572, 0x63696C69,
-  0x6F757343, 0x796E6F73, 0x75726573, 0x51756963, 0x6B657374
-};
-*/
-
 /* ChaCha20(b64d("PPkToMEmd9+wpO1GboJ1xQJKSsmbWDSJredh8EDC8DI="), 0, 0) */
 static const uint8_t PERS_ENC[16] = {160,170,102,34,71,212,102,21,111,136,
 89,185,166,163,227,234};
