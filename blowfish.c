@@ -445,9 +445,12 @@ static int BF_crypt_ext_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *
 }
 
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void *BF_crypt_clone(struct BF_data *dst, struct BF_data *src) {
   return memcpy(dst, src, sizeof(struct BF_data));
 }
+#pragma GCC diagnostic pop
 
 static char *BF_crypt(struct BF_data *data, const uint8_t *key, const char *setting, char *output, int size, BF_word min) {
   if (BF_crypt_init(data, key, setting, min) != 0) return NULL;
@@ -675,10 +678,8 @@ int bcrypt_target(uint32_t msec) {
 
 int bcrypt_test() {
   int ret = 0;
-  struct BF_data data, clone;
-  char output[80];
+  struct BF_data data;
 
-  //*
   int saved_errno;
   for (int i = 0; i < 4; i += 1) {
     saved_errno = errno;
@@ -691,7 +692,10 @@ int bcrypt_test() {
   }
 
   return ret;
-  //*/
+
+  /*
+  struct BF_data clone;
+  char output[80];
 
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
@@ -735,6 +739,7 @@ int bcrypt_test() {
   }
 
   return ret;
+  */
 }
 
 int bcrypt_check(const uint8_t *key, const char *input) {
