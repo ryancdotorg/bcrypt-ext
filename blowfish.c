@@ -782,7 +782,7 @@ int bcrypt_ext_check(const uint8_t *key, const char *input, uint8_t ext[32]) {
   return 0;
 }
 
-static char *_bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[32], char rand, int workfactor) {
+static char *_bcrypt_ext_hash(const uint8_t *key, char *output, int size, const uint8_t ext[32], int workfactor) {
   assert(size >= BF_EXT_LEN + 1);
 
   uint8_t kwk[64];
@@ -798,19 +798,15 @@ static char *_bcrypt_ext_create(const uint8_t *key, char *output, int size, uint
 
     if ((fail = BF_crypt_init(&data, key, setting, 0)) == 0) {
       if ((fail = BF_crypt_work(&data, -1)) == 0) {
-        if (rand && csprng(ext, 32) < 32) {
-          errno = errno || EIO;
-        } else {
-          BF_crypt_ext_kwk(&data, kwk);
-          // output hash
-          retval = BF_crypt_output(&data, output, size);
-          // wrap the ext key
-          if (BF_crypt_ext_wrap(kwk, output, size, ext) != 0) {
-            errno = errno || EINVAL;
-            retval = NULL;
-          }
-          memzero(kwk, sizeof(kwk));
+        BF_crypt_ext_kwk(&data, kwk);
+        // output hash
+        retval = BF_crypt_output(&data, output, size);
+        // wrap the ext key
+        if (BF_crypt_ext_wrap(kwk, output, size, ext) != 0) {
+          errno = errno || EINVAL;
+          retval = NULL;
         }
+        memzero(kwk, sizeof(kwk));
       }
     }
   }
@@ -831,8 +827,21 @@ char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[
     return NULL;
   }
 
-  char *tmp = _bcrypt_ext_create(key, output, size, ext, 1, workfactor);
-  return tmp;
+  if (csprng(ext, 32) < 32) {
+    errno = errno || EIO;
+    return NULL;
+  }
+
+  return _bcrypt_ext_hash(key, output, size, ext, workfactor);
+}
+
+char *bcrypt_ext_hash(const uint8_t *key, char *output, int size, const uint8_t ext[32], int workfactor) {
+  if (size < BF_EXT_LEN + 1) {
+    errno = ERANGE;
+    return NULL;
+  }
+
+  return _bcrypt_ext_hash(key, output, size, ext, workfactor);
 }
 
 char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io, int size, int new_workfactor) {
@@ -857,5 +866,5 @@ char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io,
     return NULL;
   }
 
-  return _bcrypt_ext_create(new_key, io, size, ext, 0, workfactor);
+  return _bcrypt_ext_hash(new_key, io, size, ext, workfactor);
 }
