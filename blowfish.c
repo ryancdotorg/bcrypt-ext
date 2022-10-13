@@ -180,27 +180,6 @@ static uint64_t fstons(double s) {
 }
 #pragma GCC diagnostic pop
 
-static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
-  const uint8_t *ptr = key;
-
-  BF_word tmp;
-
-  for (int i = 0; i < BF_N + 2; i++) {
-    tmp = 0;
-
-    // load 32 bit big endian value from password
-    for (int j = 0; j < 4; j++) {
-      tmp <<= 8;
-      tmp |= *ptr;
-      // wrap on null terminator
-      ptr = *ptr ? ptr + 1 : key;
-    }
-
-    expanded[i] = tmp;
-    initial[i] = BF_init_state.P[i] ^ tmp;
-  }
-}
-
 // decrement unsigned 128 bit integer
 static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   if (n[0] == 1) {
@@ -224,6 +203,28 @@ static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   }
 
   return -1;
+}
+
+
+static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
+  const uint8_t *ptr = key;
+
+  BF_word tmp;
+
+  for (int i = 0; i < BF_N + 2; i++) {
+    tmp = 0;
+
+    // load 32 bit big endian value from password
+    for (int j = 0; j < 4; j++) {
+      tmp <<= 8;
+      tmp |= *ptr;
+      // wrap on null terminator
+      ptr = *ptr ? ptr + 1 : key;
+    }
+
+    expanded[i] = tmp;
+    initial[i] = BF_init_state.P[i] ^ tmp;
+  }
 }
 
 // set unsigned 128 bit integer to 2 to the x'th power
