@@ -358,6 +358,17 @@ static char *BF_crypt_output(struct BF_data *data, char *output, int size) {
   return output;
 }
 
+static char *BF_crypt_kwk_output(struct BF_data *data, char *output, int size, uint8_t kwk[BLAKE2B_KEYBYTES]) {
+  BF_word *S = (BF_word *)data->ctx.S;
+  BF_htobe(S, 4*256);
+  // it should not be possible for this to fail...
+  int ret = blake2b_simple(kwk, BLAKE2B_KEYBYTES, S, sizeof(BF_word)*4*256);
+  assert(ret == 0);
+  BF_betoh(S, 4*256);
+
+  return BF_crypt_output(data, output, size);
+}
+
 static int BF_crypt_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, int size, const uint8_t ext[BX_WKBYTES]) {
   if (size < BF_EXT_LEN + 1) {
     errno = ERANGE;
@@ -462,15 +473,7 @@ static char *BF_crypt(struct BF_data *data, const uint8_t *key, const char *sett
 static char *BF_crypt_kwk(struct BF_data *data, const uint8_t *key, const char *setting, char *output, int size, uint8_t kwk[BLAKE2B_KEYBYTES], BF_word min) {
   if (BF_crypt_init(data, key, setting, min) != 0) return NULL;
   if (BF_crypt_work(data, -1) != 0) return NULL;
-
-  BF_word *S = (BF_word *)data->ctx.S;
-  BF_htobe(S, 4*256);
-  // it should not be possible for this to fail...
-  int ret = blake2b_simple(kwk, BLAKE2B_KEYBYTES, S, sizeof(BF_word)*4*256);
-  assert(ret == 0);
-  BF_betoh(S, 4*256);
-
-  return BF_crypt_output(data, output, size);
+  return BF_crypt_kwk_output(data, output, size, kwk);
 }
 
 static void magic(const char *setting, char *output, int size) {
@@ -663,6 +666,12 @@ static char *BF_bind(const uint8_t *key, char *output, int size, const uint8_t e
   errno = errno || EINVAL;
   return retval;
 }
+
+/*************************
+ *                       *
+ *   EXPOSED FUNCTIONS   *
+ *                       *
+ *************************/
 
 // XXX maybe getrusage timing?
 int64_t bcrypt_bench(int workfactor) {
