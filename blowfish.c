@@ -308,14 +308,15 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < 0) work = data->workfactor;
 
-  // only use uint128 functions if required
   if (work < (int)(LIMB_BITS)) {
+    // iteration count fits in a standard variable
     LIMB_T n = ((LIMB_T)1) << work;
 
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
     } while (--n);
   } else {
+    // uint128 support needed
     LIMB_T n[16/LIMB_SIZE];
     if (uint128_shl(n, work) != 0) return -1;
 
@@ -366,23 +367,28 @@ static int BF_crypt_ext_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, 
   blake2b_param P[1];
   blake2b_state S[1];
   BF_word wrapped[12];
+  // ciphertext || auth tag
   uint8_t *ct = ((uint8_t *)(wrapped));
   uint8_t *mac = ((uint8_t *)(wrapped)) + BX_WKBYTES;
 
   blake2b_param_new(P);
 
+  // keystream = blake2b(key = kwk, pers = [enc], data = pwhash)
   blake2b_param_set(P, BLAKE2B_PERSONAL, PERS_ENC, sizeof(PERS_ENC));
   blake2b_init(S, P, BX_WKBYTES, kwk, BLAKE2B_KEYBYTES);
   blake2b_update(S, output, BF_HASH_LEN);
   blake2b_final(S, ct, BX_WKBYTES);
+  // ciphertext = plaintext xor keystream (in place)
   for (int i = 0; i < BX_WKBYTES; ++i) ct[i] ^= ext[i];
 
+  // auth tag = blake2b(key = kwk, pers = [mac], data = pwhash || ciphertext)
   blake2b_param_set(P, BLAKE2B_PERSONAL, PERS_MAC, sizeof(PERS_MAC));
   blake2b_init(S, P, BX_MACBYTES, kwk, BLAKE2B_KEYBYTES);
   blake2b_update(S, output, BF_HASH_LEN);
   blake2b_update(S, ct, BX_WKBYTES);
   blake2b_final(S, mac, BX_MACBYTES);
 
+  // encode wrapped data and append to pwhash
   output[BF_HASH_LEN] = '$';
   BF_letoh(wrapped, 12);
   BF_encode(output+BF_HASH_LEN+1, (BF_word *)wrapped, 48);
@@ -400,20 +406,24 @@ static int BF_crypt_ext_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *
   uint8_t ks[BX_WKBYTES];
   uint8_t chk[BX_MACBYTES];
 
+  // decode wrapped data from pwhash
   BF_decode((BF_word *)wrapped, input+BF_HASH_LEN+1, 48);
   BF_htole(wrapped, 12);
 
+  // ciphertext || auth tag
   uint8_t *ct = ((uint8_t *)(wrapped));
   uint8_t *mac = ((uint8_t *)(wrapped)) + BX_WKBYTES;
 
   blake2b_param_new(P);
 
+  // auth tag = blake2b(key = kwk, pers = [mac], data = pwhash || ciphertext)
   blake2b_param_set(P, BLAKE2B_PERSONAL, PERS_MAC, sizeof(PERS_MAC));
   blake2b_init(S, P, BX_MACBYTES, kwk, BLAKE2B_KEYBYTES);
   blake2b_update(S, input, BF_HASH_LEN);
   blake2b_update(S, ct, BX_WKBYTES);
   blake2b_final(S, chk, BX_MACBYTES);
 
+  // verify auth tag
   uint8_t v = 0;
   for (int i = 0; i < BX_MACBYTES; ++i) v |= mac[i] ^ chk[i];
 
@@ -421,10 +431,12 @@ static int BF_crypt_ext_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *
 
   if (v != 0) return -1;
 
+  // keystream = blake2b(key = kwk, pers = [enc], data = pwhash)
   blake2b_param_set(P, BLAKE2B_PERSONAL, PERS_ENC, sizeof(PERS_ENC));
   blake2b_init(S, P, BX_WKBYTES, kwk, BLAKE2B_KEYBYTES);
   blake2b_update(S, input, BF_HASH_LEN);
   blake2b_final(S, ks, BX_WKBYTES);
+  // plaintext = ciphertext xor keystream
   for (int i = 0; i < BX_WKBYTES; ++i) ext[i] = ct[i] ^ ks[i];
 
   memzero(ks, BX_WKBYTES);
@@ -471,6 +483,7 @@ static int csprng(void *out, int len) {
   if (len < 0) return ret;
 
   // ideally, just use getrandom
+  // TODO: add other OS API suppport
 #ifdef HAS_GETRANDOM
   ret = getrandom(out, len, GRND_NONBLOCK);
 #endif
@@ -575,6 +588,7 @@ static int BF_test(struct BF_data *data, int workfactor) {
   return ok ? 0 : -1;
 }
 
+// encode setting string with random salt
 static char *BF_salt(char *output, int size, int workfactor) {
   if (size < BF_SETTING_LEN + 1) {
     errno = ERANGE;
