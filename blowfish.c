@@ -358,7 +358,7 @@ static char *BF_crypt_output(struct BF_data *data, char *output, int size) {
   return output;
 }
 
-static int BF_crypt_ext_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, int size, const uint8_t ext[BX_WKBYTES]) {
+static int BF_crypt_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, int size, const uint8_t ext[BX_WKBYTES]) {
   if (size < BF_EXT_LEN + 1) {
     errno = ERANGE;
     return -1;
@@ -399,7 +399,7 @@ static int BF_crypt_ext_wrap(const uint8_t kwk[BLAKE2B_KEYBYTES], char *output, 
   return 0;
 }
 
-static int BF_crypt_ext_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *input, uint8_t ext[BX_WKBYTES]) {
+static int BF_crypt_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *input, uint8_t ext[BX_WKBYTES]) {
   blake2b_param P[1];
   blake2b_state S[1];
   BF_word wrapped[12];
@@ -761,7 +761,7 @@ int bcrypt_ext_check(const uint8_t *key, const char *input, uint8_t ext[BX_WKBYT
 
   if (ext != NULL) {
     retval = BF_crypt_kwk(&data, key, input, output, sizeof(output), kwk, 0);
-    fail = BF_crypt_ext_unwrap(kwk, input, ext);
+    fail = BF_crypt_unwrap(kwk, input, ext);
     memzero(kwk, sizeof(kwk));
   } else {
     fail = 0;
@@ -798,7 +798,7 @@ static char *_bcrypt_ext_bind(const uint8_t *key, char *output, int size, const 
     retval = BF_crypt_kwk(&data, key, setting, output, size, kwk, 0);
     if (retval != NULL) {
       // wrap the ext key
-      if (BF_crypt_ext_wrap(kwk, output, size, ext) != 0) {
+      if (BF_crypt_wrap(kwk, output, size, ext) != 0) {
         errno = errno || EINVAL;
         retval = NULL;
       }
