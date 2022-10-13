@@ -446,7 +446,6 @@ static int BF_crypt_unwrap(const uint8_t kwk[BLAKE2B_KEYBYTES], const char *inpu
   return 0;
 }
 
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 static void *BF_crypt_clone(struct BF_data *dst, struct BF_data *src) {
