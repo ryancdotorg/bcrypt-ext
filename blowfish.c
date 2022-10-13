@@ -742,10 +742,14 @@ int bcrypt_test() {
   }
 
   return ret;
+}
 
-  /*
-  struct BF_data clone;
+int bcrypt_vectors() {
+  int ret;
+  struct BF_data data, clone;
   char output[80];
+
+  if ((ret = bcrypt_test()) != 0) return ret;
 
   const uint8_t *test_key = (uint8_t *)"8b \xd0\xc1\xd2\xcf\xcc\xd8";
   const char *test_setting = "$2b$00$abcdefghijklmnopqrstuu";
@@ -789,7 +793,6 @@ int bcrypt_test() {
   }
 
   return ret;
-  */
 }
 
 int bcrypt_check(const uint8_t *key, const char *input) {
