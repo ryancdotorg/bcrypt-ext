@@ -623,6 +623,47 @@ static char *BF_salt(char *output, int size, int workfactor) {
   return output;
 }
 
+static char *BF_bind(const uint8_t *key, char *output, int size, const uint8_t ext[BX_WKBYTES], int workfactor) {
+  assert(size >= BF_EXT_LEN + 1);
+
+  uint8_t kwk[64];
+  struct BF_data data;
+  char setting[BF_SETTING_LEN + 1], *retval = NULL;
+  setting[0] = 0;
+
+  if (BF_salt(setting, sizeof(setting), workfactor) == NULL) {
+    errno = errno || EINVAL;
+    return NULL;
+  }
+
+  magic(setting, output, size);
+
+  if (ext != NULL) {
+    retval = BF_crypt_kwk(&data, key, setting, output, size, kwk, 0);
+    if (retval != NULL) {
+      // wrap the ext key
+      if (BF_crypt_wrap(kwk, output, size, ext) != 0) {
+        errno = errno || EINVAL;
+        retval = NULL;
+      }
+    }
+
+    memzero(kwk, sizeof(kwk));
+  } else {
+    retval = BF_crypt(&data, key, setting, output, size, 4);
+  }
+
+  int saved_errno = errno;
+  if (BF_test(&data, 0) == 0) {
+    errno = saved_errno;
+    return retval;
+  }
+
+  magic(setting, output, size);
+  errno = errno || EINVAL;
+  return retval;
+}
+
 // XXX maybe getrusage timing?
 int64_t bcrypt_bench(int workfactor) {
   int64_t d, best_d = INT64_MAX;
@@ -779,46 +820,6 @@ int bcrypt_ext_check(const uint8_t *key, const char *input, uint8_t ext[BX_WKBYT
   return 0;
 }
 
-static char *_bcrypt_ext_bind(const uint8_t *key, char *output, int size, const uint8_t ext[BX_WKBYTES], int workfactor) {
-  assert(size >= BF_EXT_LEN + 1);
-
-  uint8_t kwk[64];
-  struct BF_data data;
-  char setting[BF_SETTING_LEN + 1], *retval = NULL;
-  setting[0] = 0;
-
-  if (BF_salt(setting, sizeof(setting), workfactor) == NULL) {
-    errno = errno || EINVAL;
-    return NULL;
-  }
-
-  magic(setting, output, size);
-
-  if (ext != NULL) {
-    retval = BF_crypt_kwk(&data, key, setting, output, size, kwk, 0);
-    if (retval != NULL) {
-      // wrap the ext key
-      if (BF_crypt_wrap(kwk, output, size, ext) != 0) {
-        errno = errno || EINVAL;
-        retval = NULL;
-      }
-    }
-
-    memzero(kwk, sizeof(kwk));
-  } else {
-    retval = BF_crypt(&data, key, setting, output, size, 4);
-  }
-
-  int saved_errno = errno;
-  if (BF_test(&data, 0) == 0) {
-    errno = saved_errno;
-    return retval;
-  }
-
-  magic(setting, output, size);
-  errno = errno || EINVAL;
-  return retval;
-}
 
 char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[BX_WKBYTES], int workfactor) {
   if (size < BF_EXT_LEN + 1) {
@@ -832,7 +833,7 @@ char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[
     return NULL;
   }
 
-  return _bcrypt_ext_bind(key, output, size, ext, workfactor);
+  return BF_bind(key, output, size, ext, workfactor);
 }
 
 char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) {
@@ -841,7 +842,7 @@ char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) 
     return NULL;
   }
 
-  return _bcrypt_ext_bind(key, output, size, NULL, workfactor);
+  return BF_bind(key, output, size, NULL, workfactor);
 }
 
 
@@ -851,7 +852,7 @@ char *bcrypt_ext_bind(const uint8_t *key, char *output, int size, const uint8_t 
     return NULL;
   }
 
-  return _bcrypt_ext_bind(key, output, size, ext, workfactor);
+  return BF_bind(key, output, size, ext, workfactor);
 }
 
 char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io, int size, int new_workfactor) {
@@ -876,5 +877,5 @@ char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io,
     return NULL;
   }
 
-  return _bcrypt_ext_bind(new_key, io, size, ext, workfactor);
+  return BF_bind(new_key, io, size, ext, workfactor);
 }
