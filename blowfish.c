@@ -787,10 +787,6 @@ int bcrypt_vectors() {
   return ret;
 }
 
-int bcrypt_check(const uint8_t *key, const char *input) {
-  return bcrypt_ext_check(key, input, NULL);
-}
-
 int bcrypt_ext_test() {
   // TODO
   return bcrypt_test();
@@ -840,16 +836,6 @@ char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[
   return BF_bind(key, output, size, ext, workfactor);
 }
 
-char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) {
-  if (size < BF_HASH_LEN + 1) {
-    errno = ERANGE;
-    return NULL;
-  }
-
-  return BF_bind(key, output, size, NULL, workfactor);
-}
-
-
 char *bcrypt_ext_bind(const uint8_t *key, char *output, int size, const uint8_t ext[BX_WKBYTES], int workfactor) {
   if (size < BF_EXT_LEN + 1) {
     errno = ERANGE;
@@ -882,4 +868,17 @@ char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *io,
   }
 
   return BF_bind(new_key, io, size, ext, workfactor);
+}
+
+int bcrypt_check(const uint8_t *key, const char *input) {
+  return bcrypt_ext_check(key, input, NULL);
+}
+
+char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) {
+  if (size < BF_HASH_LEN + 1) {
+    errno = ERANGE;
+    return NULL;
+  }
+
+  return BF_bind(key, output, size, NULL, workfactor);
 }
