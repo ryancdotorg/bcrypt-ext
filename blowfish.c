@@ -182,6 +182,7 @@ static uint64_t getns() {
   ns += ts.tv_sec * BILLION;
   return ns;
 }
+
 static uint64_t fstons(double s) {
   double ns = s * 1e9;
   return (uint64_t)ns;
@@ -604,32 +605,36 @@ int64_t bcrypt_bench(int workfactor) {
     ++i;
     t = getns();
     int saved_errno = errno;
-    if (BF_test(&data, workfactor) == 0) return -1;
+    if (BF_test(&data, workfactor) != 0) return -1;
     errno = saved_errno;
     d = getns() - t;
     if (d > 0 && d < best_d) best_d = d;
-  } while (t - start < 1000000LL || i < 1);
+  } while (t - start < 1000000LL || i < 3);
 
   return best_d;
 }
 
+#define TARGET_TEST_MAX 8
+#define TARGET_TEST_OK  4
 int bcrypt_target(uint32_t msec) {
   int ratio_okay = 0;
   double ratio;
   int64_t nsec = (int64_t)msec * 1000000LL, curr, last;
-  for (int repeat = 0; repeat < 10; ++repeat) {
+  for (int repeat = 0; repeat < 12; ++repeat) {
     last = -1;
-    for (int i = 1; i <= 8; ++i) {
+    for (int i = 1; i <= TARGET_TEST_MAX; ++i) {
       curr = bcrypt_bench(i);
       if (i > 3) {
         ratio = (double)curr / (double)last;
         if (ratio >= 1.9 && ratio <= 2.1) {
           ratio_okay += 1;
+        } else if (i > TARGET_TEST_MAX - TARGET_TEST_OK) {
+          break;
         } else {
           ratio_okay = 0;
         }
 
-        if (ratio_okay >= 4) {
+        if (ratio_okay >= TARGET_TEST_OK) {
           while (curr > nsec * 3) { curr /= 2; --i; }
           while (curr < (nsec * 3) / 4) { curr *= 2; ++i; }
           return i;
