@@ -307,12 +307,6 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < (int)(LIMB_BITS)) {
     LIMB_T n = ((LIMB_T)1) << work;
-    /*
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat"
-    fprintf(stderr, "doing work using (%lu bits) %lx\n", LIMB_BITS, n);
-#pragma GCC diagnostic pop
-    //*/
 
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
@@ -320,22 +314,6 @@ static int BF_crypt_work(struct BF_data *data, int work) {
   } else {
     LIMB_T n[16/LIMB_SIZE];
     if (uint128_shl(n, work) != 0) return -1;
-
-    /*
-    fprintf(stderr, "doing work using uint128 emulation ");
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat"
-    if (16/LIMB_SIZE == 2) {
-      fprintf(stderr, "%016lx %016lx\n", n[0], n[1]);
-    } else if (16/LIMB_SIZE == 4) {
-      fprintf(stderr, "%08lx %08lx %08lx %08lx\n", n[0], n[1], n[2], n[3]);
-    } else if (16/LIMB_SIZE == 8) {
-      fprintf(stderr, "%04x %04x %04x %04x %04x %04x %04x %04x\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7]);
-    } else if (16/LIMB_SIZE == 16) {
-      fprintf(stderr, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8], n[9], n[10], n[11], n[12], n[13], n[14], n[15]);
-    }
-#pragma GCC diagnostic pop
-    //*/
 
     do {
       BF_iter(data, L, R, tmp1, tmp2, tmp3, tmp4);
@@ -573,9 +551,6 @@ static int BF_test(struct BF_data *data, int workfactor) {
   memset(buf.o, 0x55, sizeof(buf.o));
   buf.o[sizeof(buf.o) - 1] = 0;
   p = BF_crypt(data, test_key, buf.s, buf.o, sizeof(buf.o) - (1 + 1), 0);
-  //printf("p(%p): %s\n", p, p);
-  //printf("t(%p):                              %s\n", test_hash, test_hash);
-  //printf("s(%p): %s\n", buf.s, buf.s);
   ok = (p == buf.o &&
         !memcmp(p, buf.s, BF_SETTING_LEN) &&
         !memcmp(p + (BF_SETTING_LEN), test_hash, BF_BLOWFISH_LEN + 1 + 1 + 1));
