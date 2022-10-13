@@ -236,6 +236,15 @@ static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
   }
 }
 
+static void BF_kwk(struct BF_data *data, uint8_t kwk[BLAKE2B_KEYBYTES]) {
+  BF_word *S = (BF_word *)data->ctx.S;
+  BF_htobe(S, 4*256);
+  // it should not be possible for this to fail...
+  int ret = blake2b_simple(kwk, BLAKE2B_KEYBYTES, S, sizeof(BF_word)*4*256);
+  assert(ret == 0);
+  BF_betoh(S, 4*256);
+}
+
 static int BF_crypt_init(struct BF_data *data, const uint8_t *key, const char *setting, BF_word min) {
   BF_word L, R;
   BF_word tmp1, tmp2, tmp3, tmp4;
@@ -350,13 +359,7 @@ static char *BF_crypt_output(struct BF_data *data, char *output, int size) {
 }
 
 static char *BF_crypt_kwk_output(struct BF_data *data, char *output, int size, uint8_t kwk[BLAKE2B_KEYBYTES]) {
-  BF_word *S = (BF_word *)data->ctx.S;
-  BF_htobe(S, 4*256);
-  // it should not be possible for this to fail...
-  int ret = blake2b_simple(kwk, BLAKE2B_KEYBYTES, S, sizeof(BF_word)*4*256);
-  assert(ret == 0);
-  BF_betoh(S, 4*256);
-
+  BF_kwk(data, kwk);
   return BF_crypt_output(data, output, size);
 }
 
