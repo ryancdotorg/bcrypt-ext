@@ -94,6 +94,6 @@ char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor);
 
 int bcrypt_ext_test();
 int bcrypt_ext_check(const uint8_t *key, const char *input, uint8_t *ext);
-char *bcrypt_ext_hash(const uint8_t *key, char *output, int size, const uint8_t ext[32], int workfactor);
+char *bcrypt_ext_bind(const uint8_t *key, char *output, int size, const uint8_t ext[32], int workfactor);
 char *bcrypt_ext_create(const uint8_t *key, char *output, int size, uint8_t ext[32], int workfactor);
 char *bcrypt_ext_rekey(const uint8_t *old_key, const uint8_t *new_key, char *data, int size, int new_workfactor);
