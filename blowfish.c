@@ -210,6 +210,7 @@ static void BF_set_key(const uint8_t *key, BF_key expanded, BF_key initial) {
   }
 }
 
+// decrement unsigned 128 bit integer
 static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   if (n[0] == 1) {
     for (unsigned i = 1;;) {
@@ -234,6 +235,7 @@ static inline int uint128_dec(LIMB_T n[16/LIMB_SIZE]) {
   return -1;
 }
 
+// set unsigned 128 bit integer to 2 to the x'th power
 static int uint128_shl(LIMB_T n[16/LIMB_SIZE], int x) {
   if (x < 0 || x > 127) return -1;
   for (unsigned i = 0; i < (16/LIMB_SIZE); ++i) n[i] = 0;
@@ -306,6 +308,7 @@ static int BF_crypt_work(struct BF_data *data, int work) {
 
   if (work < 0) work = data->workfactor;
 
+  // only use uint128 functions if required
   if (work < (int)(LIMB_BITS)) {
     LIMB_T n = ((LIMB_T)1) << work;
 
@@ -354,6 +357,7 @@ static char *BF_crypt_output(struct BF_data *data, char *output, int size) {
   return output;
 }
 
+// generate a key wrapping key from the S array
 static void BF_crypt_ext_kwk(struct BF_data *data, uint8_t kwk[BLAKE2B_KEYBYTES]) {
   BF_word *S = (BF_word *)data->ctx.S;
 
@@ -462,6 +466,7 @@ static int csprng(void *out, int len) {
   int ret = -1;
   if (len < 0) return ret;
 
+  // ideally, just use getrandom
 #ifdef HAS_GETRANDOM
   ret = getrandom(out, len, GRND_NONBLOCK);
 #endif
@@ -473,6 +478,7 @@ static int csprng(void *out, int len) {
     errno = 0;
     if ((fd = open("/dev/urandom", O_RDONLY)) < 0) return -1;
 
+    // keep reading until we have enough bytes
     ssize_t n;
     int total = 0;
     while (total < len) {
@@ -596,6 +602,7 @@ static char *BF_salt(char *output, int size, int workfactor) {
   return output;
 }
 
+// XXX maybe getrusage timing?
 int64_t bcrypt_bench(int workfactor) {
   int64_t d, best_d = INT64_MAX;
   uint64_t t, i = 0, start = getns();
@@ -738,6 +745,7 @@ char *bcrypt_create(const uint8_t *key, char *output, int size, int workfactor) 
 }
 
 int bcrypt_ext_test() {
+  // TODO
   return bcrypt_test();
 }
 
